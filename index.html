@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Location Tracker (iPhone Ready)</title>
+
+<!-- Load PeerJS with fallback -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+if (typeof Peer === "undefined") {
+  document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"><\/script>');
+}
+</script>
+
+<style>
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  background: #f5f5f5;
+  padding: 20px;
+  max-width: 600px;
+  margin: auto;
+}
+button {
+  padding: 14px;
+  font-size: 16px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  margin-top: 10px;
+  color: white;
+  background: #007aff;
+}
+button:active { transform: scale(0.97); }
+video {
+  width: 100%;
+  background: black;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+.hidden { display: none; }
+.status {
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: bold;
+}
+.connected { background: #34c759; color: white; }
+.waiting { background: #ff9500; color: white; }
+.error { background: #ff3b30; color: white; }
+code {
+  display: block;
+  background: #e8f0fe;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+  text-align: center;
+  word-break: break-all;
+}
+</style>
+</head>
+<body>
+<h1>📍 Location & Video Tracker</h1>
+
+<div id="start">
+  <button onclick="startServer()">🎥 Start as Server</button>
+  <p style="text-align:center;color:#999;margin:10px;">— OR —</p>
+  <input id="peerInput" placeholder="Enter Server ID" style="padding:14px;width:100%;border-radius:8px;border:1px solid #ccc;text-transform:uppercase;">
+  <button onclick="joinClient()">📱 Join as Client</button>
+  <div id="startError" class="status error hidden"></div>
+</div>
+
+<div id="server" class="hidden">
+  <h2>Server Mode</h2>
+  <div class="status waiting">Share this Peer ID:</div>
+  <code id="myId">Loading...</code>
+  <button onclick="copyPeerId()">📋 Copy Peer ID</button>
+  <video id="localVideo" autoplay muted playsinline></video>
+  <div class="status waiting" id="serverStatus">Waiting for client...</div>
+  <div id="serverLoc" class="status">📍 Waiting for GPS...</div>
+  <button onclick="disconnect()">❌ Disconnect</button>
+</div>
+
+<div id="client" class="hidden">
+  <h2>Client Mode</h2>
+  <div id="clientStatus" class="status waiting">Connecting...</div>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div id="clientLoc" class="status">📍 Waiting for location...</div>
+  <button id="mapBtn" class="hidden" onclick="openMap()">🗺️ Open in Google Maps</button>
+  <button onclick="disconnect()">❌ Disconnect</button>
+</div>
+
+<script>
+let peer, conn, call, localStream, watchId, serverLocation = null;
+
+// ✅ Wait for PeerJS to load before continuing
+window.addEventListener('load', () => {
+  if (typeof Peer === "undefined") {
+    alert("⚠️ PeerJS failed to load. Check your internet connection.");
+  }
+});
+
+async function startServer() {
+  try {
+    peer = new Peer({
+      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+    });
+    peer.on('open', async (id) => {
+      document.getElementById('myId').textContent = id;
+      document.getElementById('start').classList.add('hidden');
+      document.getElementById('server').classList.remove('hidden');
+      await setupMedia();
+      setupLocation();
+    });
+
+    peer.on('call', (incomingCall) => {
+      incomingCall.answer(localStream);
+      document.getElementById('serverStatus').textContent = "✅ Client connected!";
+      document.getElementById('serverStatus').classList.add('connected');
+    });
+
+    peer.on('connection', (connection) => {
+      conn = connection;
+      conn.on('open', () => {
+        if (serverLocation) conn.send(serverLocation);
+      });
+    });
+  } catch (err) {
+    showError('Failed to start: ' + err.message);
+  }
+}
+
+async function joinClient() {
+  const peerId = document.getElementById('peerInput').value.trim();
+  if (!peerId) return showError("Enter a Server Peer ID");
+
+  peer = new Peer();
+  peer.on('open', async () => {
+    document.getElementById('start').classList.add('hidden');
+    document.getElementById('client').classList.remove('hidden');
+
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    localStream.getTracks().forEach(t => t.enabled = false);
+
+    call = peer.call(peerId, localStream);
+    call.on('stream', (remoteStream) => {
+      document.getElementById('remoteVideo').srcObject = remoteStream;
+      document.getElementById('clientStatus').textContent = "✅ Connected";
+      document.getElementById('clientStatus').classList.add('connected');
+    });
+
+    conn = peer.connect(peerId);
+    conn.on('data', (data) => {
+      serverLocation = data;
+      document.getElementById('clientLoc').innerHTML =
+        `Lat: ${data.lat.toFixed(6)}<br>Lng: ${data.lng.toFixed(6)}`;
+      document.getElementById('mapBtn').classList.remove('hidden');
+    });
+  });
+}
+
+async function setupMedia() {
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user' }, audio: true
+  });
+  document.getElementById('localVideo').srcObject = localStream;
+}
+
+function setupLocation() {
+  if (!navigator.geolocation) {
+    document.getElementById('serverLoc').textContent = "❌ No GPS support.";
+    return;
+  }
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      serverLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      document.getElementById('serverLoc').innerHTML =
+        `Lat: ${serverLocation.lat.toFixed(6)}<br>Lng: ${serverLocation.lng.toFixed(6)}`;
+      if (conn && conn.open) conn.send(serverLocation);
+    },
+    (err) => {
+      document.getElementById('serverLoc').textContent = "❌ " + err.message;
+    },
+    { enableHighAccuracy: true }
+  );
+}
+
+function copyPeerId() {
+  const id = document.getElementById('myId').textContent;
+  navigator.clipboard.writeText(id).then(() => alert("Copied: " + id));
+}
+
+function openMap() {
+  if (serverLocation)
+    window.open(`https://www.google.com/maps?q=${serverLocation.lat},${serverLocation.lng}`, '_blank');
+}
+
+function disconnect() {
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+  if (localStream) localStream.getTracks().forEach(t => t.stop());
+  if (peer) peer.destroy();
+  location.reload();
+}
+
+function showError(msg) {
+  const el = document.getElementById('startError');
+  el.textContent = "❌ " + msg;
+  el.classList.remove('hidden');
+}
+</script>
+</body>
+</html>
