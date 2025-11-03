@@ -3,15 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Location Tracker (iPhone Ready)</title>
+<title>Location Tracker (Fixed ID 1134)</title>
 
-<!-- Load PeerJS with fallback -->
+<!-- Load PeerJS -->
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<script>
-if (typeof Peer === "undefined") {
-  document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"><\/script>');
-}
-</script>
 
 <style>
 body {
@@ -49,33 +44,20 @@ video {
 .connected { background: #34c759; color: white; }
 .waiting { background: #ff9500; color: white; }
 .error { background: #ff3b30; color: white; }
-code {
-  display: block;
-  background: #e8f0fe;
-  padding: 12px;
-  border-radius: 8px;
-  margin-top: 8px;
-  text-align: center;
-  word-break: break-all;
-}
 </style>
 </head>
 <body>
 <h1>📍 Location & Video Tracker</h1>
 
 <div id="start">
-  <button onclick="startServer()">🎥 Start as Server</button>
-  <p style="text-align:center;color:#999;margin:10px;">— OR —</p>
-  <input id="peerInput" placeholder="Enter Server ID" style="padding:14px;width:100%;border-radius:8px;border:1px solid #ccc;text-transform:uppercase;">
-  <button onclick="joinClient()">📱 Join as Client</button>
+  <button onclick="startServer()">🎥 Start as Server (ID 1134)</button>
+  <button onclick="joinClient()">📱 Join as Client (connects to 1134)</button>
   <div id="startError" class="status error hidden"></div>
 </div>
 
 <div id="server" class="hidden">
   <h2>Server Mode</h2>
-  <div class="status waiting">Share this Peer ID:</div>
-  <code id="myId">Loading...</code>
-  <button onclick="copyPeerId()">📋 Copy Peer ID</button>
+  <div class="status waiting">Fixed Peer ID: <b>1134</b></div>
   <video id="localVideo" autoplay muted playsinline></video>
   <div class="status waiting" id="serverStatus">Waiting for client...</div>
   <div id="serverLoc" class="status">📍 Waiting for GPS...</div>
@@ -84,7 +66,7 @@ code {
 
 <div id="client" class="hidden">
   <h2>Client Mode</h2>
-  <div id="clientStatus" class="status waiting">Connecting...</div>
+  <div id="clientStatus" class="status waiting">Connecting to 1134...</div>
   <video id="remoteVideo" autoplay playsinline></video>
   <div id="clientLoc" class="status">📍 Waiting for location...</div>
   <button id="mapBtn" class="hidden" onclick="openMap()">🗺️ Open in Google Maps</button>
@@ -94,20 +76,13 @@ code {
 <script>
 let peer, conn, call, localStream, watchId, serverLocation = null;
 
-// ✅ Wait for PeerJS to load before continuing
-window.addEventListener('load', () => {
-  if (typeof Peer === "undefined") {
-    alert("⚠️ PeerJS failed to load. Check your internet connection.");
-  }
-});
-
 async function startServer() {
   try {
-    peer = new Peer({
+    peer = new Peer("1134", {
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
     });
-    peer.on('open', async (id) => {
-      document.getElementById('myId').textContent = id;
+
+    peer.on('open', async () => {
       document.getElementById('start').classList.add('hidden');
       document.getElementById('server').classList.remove('hidden');
       await setupMedia();
@@ -126,16 +101,20 @@ async function startServer() {
         if (serverLocation) conn.send(serverLocation);
       });
     });
+
+    peer.on('error', (err) => {
+      showError("Peer error: " + err.message);
+    });
+
   } catch (err) {
     showError('Failed to start: ' + err.message);
   }
 }
 
 async function joinClient() {
-  const peerId = document.getElementById('peerInput').value.trim();
-  if (!peerId) return showError("Enter a Server Peer ID");
-
+  const peerId = "1134"; // Fixed ID
   peer = new Peer();
+
   peer.on('open', async () => {
     document.getElementById('start').classList.add('hidden');
     document.getElementById('client').classList.remove('hidden');
@@ -146,7 +125,7 @@ async function joinClient() {
     call = peer.call(peerId, localStream);
     call.on('stream', (remoteStream) => {
       document.getElementById('remoteVideo').srcObject = remoteStream;
-      document.getElementById('clientStatus').textContent = "✅ Connected";
+      document.getElementById('clientStatus').textContent = "✅ Connected to 1134";
       document.getElementById('clientStatus').classList.add('connected');
     });
 
@@ -156,6 +135,10 @@ async function joinClient() {
       document.getElementById('clientLoc').innerHTML =
         `Lat: ${data.lat.toFixed(6)}<br>Lng: ${data.lng.toFixed(6)}`;
       document.getElementById('mapBtn').classList.remove('hidden');
+    });
+
+    conn.on('error', (err) => {
+      showError("Connection error: " + err.message);
     });
   });
 }
@@ -184,11 +167,6 @@ function setupLocation() {
     },
     { enableHighAccuracy: true }
   );
-}
-
-function copyPeerId() {
-  const id = document.getElementById('myId').textContent;
-  navigator.clipboard.writeText(id).then(() => alert("Copied: " + id));
 }
 
 function openMap() {
