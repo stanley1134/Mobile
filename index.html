@@ -44,14 +44,25 @@ video {
 .connected { background: #34c759; color: white; }
 .waiting { background: #ff9500; color: white; }
 .error { background: #ff3b30; color: white; }
+code {
+  display: block;
+  background: #e8f0fe;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+  text-align: center;
+  word-break: break-all;
+}
 </style>
 </head>
 <body>
 <h1>📍 Location & Video Tracker</h1>
 
 <div id="start">
-  <button onclick="startServer()">🎥 Start as Server (ID 1134)</button>
-  <button onclick="joinClient()">📱 Join as Client (connects to 1134)</button>
+  <button onclick="startServer()">🎥 Start as Server (ID: 1134)</button>
+  <p style="text-align:center;color:#999;margin:10px;">— OR —</p>
+  <input id="peerInput" placeholder="Enter Server ID (e.g. 1134)" style="padding:14px;width:100%;border-radius:8px;border:1px solid #ccc;text-transform:uppercase;">
+  <button onclick="joinClient()">📱 Join as Client</button>
   <div id="startError" class="status error hidden"></div>
 </div>
 
@@ -66,7 +77,7 @@ video {
 
 <div id="client" class="hidden">
   <h2>Client Mode</h2>
-  <div id="clientStatus" class="status waiting">Connecting to 1134...</div>
+  <div id="clientStatus" class="status waiting">Connecting...</div>
   <video id="remoteVideo" autoplay playsinline></video>
   <div id="clientLoc" class="status">📍 Waiting for location...</div>
   <button id="mapBtn" class="hidden" onclick="openMap()">🗺️ Open in Google Maps</button>
@@ -112,7 +123,9 @@ async function startServer() {
 }
 
 async function joinClient() {
-  const peerId = "1134"; // Fixed ID
+  const peerId = document.getElementById('peerInput').value.trim();
+  if (!peerId) return showError("Enter a Server Peer ID (e.g. 1134)");
+
   peer = new Peer();
 
   peer.on('open', async () => {
@@ -125,7 +138,7 @@ async function joinClient() {
     call = peer.call(peerId, localStream);
     call.on('stream', (remoteStream) => {
       document.getElementById('remoteVideo').srcObject = remoteStream;
-      document.getElementById('clientStatus').textContent = "✅ Connected to 1134";
+      document.getElementById('clientStatus').textContent = "✅ Connected to " + peerId;
       document.getElementById('clientStatus').classList.add('connected');
     });
 
